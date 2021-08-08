@@ -1,14 +1,16 @@
 package main
 
 import (
-	"bufio"
 	"encoding/csv"
 	"fmt"
 	"io"
 	"log"
+	"net/http"
 	"os"
 	"strconv"
 	"strings"
+
+	echo "github.com/labstack/echo/v4"
 )
 
 const (
@@ -18,6 +20,7 @@ const (
 )
 
 var (
+	blosum     [][]int
 	proteinMap = map[string]int{
 		"A": 0,
 		"R": 1,
@@ -47,25 +50,40 @@ var (
 )
 
 type Tree struct {
-	left  int
-	right int
-	score float64
+	Left  int     `json:"left"`
+	Right int     `json:"right"`
+	Score float64 `json:"score"`
+}
+
+type AminoSequences struct {
+	Aminos []string `json:"aminos"`
 }
 
 func main() {
-	// read blosum62.txt
-	blosum, err := readBlosum("blosum62.txt")
+	// load blosum62.txt
+	var err error
+	blosum, err = readBlosum("blosum62.txt")
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	var sc = bufio.NewScanner(os.Stdin)
-	aminos := make([]string, 0)
-	for sc.Scan() {
-		s := sc.Text()
-		aminos = append(aminos, s)
+	e := echo.New()
+	e.GET("/", getIndexHandler)
+	e.POST("/tree", postTreeHandler)
+	e.Logger.Fatal(e.Start(":8080"))
+}
+
+func getIndexHandler(c echo.Context) error {
+	return c.File("public/index.html")
+}
+
+func postTreeHandler(c echo.Context) error {
+	param := new(AminoSequences)
+	if err := c.Bind(param); err != nil {
+		return err
 	}
-	multiAlignment, err := star(blosum, aminos)
+
+	multiAlignment, err := star(blosum, param.Aminos)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -73,9 +91,7 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	for _, v := range tree {
-		fmt.Println(v)
-	}
+	return c.JSON(http.StatusOK, tree)
 }
 
 func readBlosum(filename string) ([][]int, error) {
@@ -366,9 +382,9 @@ func createTree(multiAlignment []string) ([]Tree, error) {
 	tree := make([]Tree, 0)
 	for i := 0; i < len(multiAlignment); i++ {
 		tree = append(tree, Tree{
-			left:  -1,
-			right: -1,
-			score: 0,
+			Left:  -1,
+			Right: -1,
+			Score: 0,
 		})
 		nodeIds[i] = i
 	}
@@ -405,9 +421,9 @@ func createTree(multiAlignment []string) ([]Tree, error) {
 
 		// 木に追加する
 		tree = append(tree, Tree{
-			left:  nodeIds[minJ],
-			right: nodeIds[minI],
-			score: minDistance / 2.0,
+			Left:  nodeIds[minJ],
+			Right: nodeIds[minI],
+			Score: minDistance / 2.0,
 		})
 		duplications[minJ] += duplications[minI]
 		duplications[minI] = 0
