@@ -46,6 +46,12 @@ var (
 	}
 )
 
+type Tree struct {
+	left  int
+	right int
+	score float64
+}
+
 func main() {
 	// read blosum62.txt
 	blosum, err := readBlosum("blosum62.txt")
@@ -59,11 +65,15 @@ func main() {
 		s := sc.Text()
 		aminos = append(aminos, s)
 	}
-	answer, err := star(blosum, aminos)
+	multiAlignment, err := star(blosum, aminos)
 	if err != nil {
 		log.Fatal(err)
 	}
-	for _, v := range answer {
+	tree, err := createTree(multiAlignment)
+	if err != nil {
+		log.Fatal(err)
+	}
+	for _, v := range tree {
 		fmt.Println(v)
 	}
 }
@@ -318,4 +328,94 @@ func searchGaps(gap, original string) ([]int, error) {
 		return nil, fmt.Errorf("error: cant find gap")
 	}
 	return gapPoint, nil
+}
+
+func pDistance(x, y string) (float64, error) {
+	if len(x) != len(y) {
+		return 0.0, fmt.Errorf("string length is diffrence")
+	}
+	count := 0
+	for i := 0; i < len(x); i++ {
+		if x[i] == y[i] {
+			count++
+		}
+	}
+	return float64(count) / float64(len(x)), nil
+}
+
+func createTree(multiAlignment []string) ([]Tree, error) {
+	distances := make([][]float64, len(multiAlignment))
+	for i := 0; i < len(multiAlignment); i++ {
+		distances[i] = make([]float64, len(multiAlignment))
+	}
+	for i := 0; i < len(multiAlignment); i++ {
+		for j := 0; j < i; j++ {
+			distance, err := pDistance(multiAlignment[i], multiAlignment[j])
+			if err != nil {
+				return nil, err
+			}
+			distances[i][j] = distance
+		}
+	}
+	duplications := make([]int, len(multiAlignment))
+	for i := 0; i < len(duplications); i++ {
+		duplications[i] = 1
+	}
+	nodeIds := make([]int, len(multiAlignment))
+	tree := make([]Tree, 0)
+	for i := 0; i < len(multiAlignment); i++ {
+		tree = append(tree, Tree{
+			left:  -1,
+			right: -1,
+			score: 0,
+		})
+		nodeIds[i] = i
+	}
+
+	for k := 0; k < len(multiAlignment)-1; k++ {
+		// 最小を見つける
+		minDistance := 1.0
+		var minI, minJ int
+		for i := 0; i < len(multiAlignment); i++ {
+			if duplications[i] == 0 {
+				continue
+			}
+			for j := 0; j < i; j++ {
+				if duplications[j] == 0 {
+					continue
+				}
+				if minDistance > distances[i][j] {
+					minI = i
+					minJ = j
+					minDistance = distances[i][j]
+				}
+			}
+		}
+
+		// minJにminIを統合する
+		for i := 0; i < minJ; i++ {
+			if duplications[i] == 0 {
+				continue
+			}
+			distances[minJ][i] = (distances[minJ][i]*float64(duplications[minJ]) + distances[minI][i]*float64(duplications[minI])) / float64(duplications[minJ]+duplications[minI])
+		}
+		for i := minJ + 1; i < len(multiAlignment); i++ {
+			if duplications[i] == 0 || i == minI {
+				continue
+			}
+			distances[i][minJ] = (distances[i][minJ]*float64(duplications[minJ]) + distances[i][minI]*float64(duplications[minI])) / float64(duplications[minJ]+duplications[minI])
+		}
+
+		// 木に追加する
+		tree = append(tree, Tree{
+			left:  nodeIds[minJ],
+			right: nodeIds[minI],
+			score: minDistance / 2.0,
+		})
+		duplications[minJ] += duplications[minI]
+		duplications[minI] = 0
+		nodeIds[minJ] = len(tree) - 1
+	}
+
+	return tree, nil
 }
