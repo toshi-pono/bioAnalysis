@@ -70,6 +70,7 @@ func main() {
 	e := echo.New()
 	e.GET("/", getIndexHandler)
 	e.POST("/tree", postTreeHandler)
+	e.Static("/static", "public")
 	e.Logger.Fatal(e.Start(":8080"))
 }
 
