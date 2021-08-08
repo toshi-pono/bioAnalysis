@@ -336,7 +336,7 @@ func pDistance(x, y string) (float64, error) {
 	}
 	count := 0
 	for i := 0; i < len(x); i++ {
-		if x[i] == y[i] {
+		if x[i] != y[i] {
 			count++
 		}
 	}
@@ -355,6 +355,7 @@ func createTree(multiAlignment []string) ([]Tree, error) {
 				return nil, err
 			}
 			distances[i][j] = distance
+			distances[j][i] = distance
 		}
 	}
 	duplications := make([]int, len(multiAlignment))
@@ -393,17 +394,13 @@ func createTree(multiAlignment []string) ([]Tree, error) {
 		}
 
 		// minJにminIを統合する
-		for i := 0; i < minJ; i++ {
-			if duplications[i] == 0 {
+		for i := 0; i < len(multiAlignment); i++ {
+			if duplications[i] == 0 || i == minI || i == minJ {
 				continue
 			}
-			distances[minJ][i] = (distances[minJ][i]*float64(duplications[minJ]) + distances[minI][i]*float64(duplications[minI])) / float64(duplications[minJ]+duplications[minI])
-		}
-		for i := minJ + 1; i < len(multiAlignment); i++ {
-			if duplications[i] == 0 || i == minI {
-				continue
-			}
-			distances[i][minJ] = (distances[i][minJ]*float64(duplications[minJ]) + distances[i][minI]*float64(duplications[minI])) / float64(duplications[minJ]+duplications[minI])
+			distance := (distances[minJ][i]*float64(duplications[minJ]) + distances[minI][i]*float64(duplications[minI])) / float64(duplications[minI]+duplications[minJ])
+			distances[minJ][i] = distance
+			distances[i][minJ] = distance
 		}
 
 		// 木に追加する
