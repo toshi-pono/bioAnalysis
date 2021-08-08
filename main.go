@@ -14,6 +14,7 @@ import (
 const (
 	gapPenalty = -4
 	matrixSize = 24
+	inf        = 10000000
 )
 
 var (
@@ -114,10 +115,19 @@ func sequenceAlignmentDP(matrix [][]int, xAmino string, yAmino string) (string, 
 			if err != nil {
 				return "", "", 0, err
 			}
-			dp[i+1][j+1] = max3(dp[i+1][j]+gapPenalty, dp[i][j+1]+gapPenalty, dp[i][j]+score)
+			right := dp[i+1][j]
+			down := dp[i][j+1]
+			if i+1 != len(xAmino) {
+				right += gapPenalty
+			}
+			if j+1 != len(yAmino) {
+				down += gapPenalty
+			}
+			rightDown := dp[i][j] + score
+			dp[i+1][j+1] = max3(right, down, rightDown)
 		}
 	}
-	// get back
+	// trace back
 	xAlign := ""
 	yAlign := ""
 
@@ -141,12 +151,17 @@ func sequenceAlignmentDP(matrix [][]int, xAmino string, yAmino string) (string, 
 		if err != nil {
 			return "", "", 0, err
 		}
-		if dp[xNow][yNow] == dp[xNow-1][yNow-1]+score {
+		down := dp[xNow-1][yNow]
+		rightDown := dp[xNow-1][yNow-1] + score
+		if yNow != len(yAmino) {
+			down += gapPenalty
+		}
+		if dp[xNow][yNow] == rightDown {
 			xAlign = string(xAmino[xNow-1]) + xAlign
 			yAlign = string(yAmino[yNow-1]) + yAlign
 			xNow--
 			yNow--
-		} else if dp[xNow][yNow] == dp[xNow-1][yNow]+gapPenalty {
+		} else if dp[xNow][yNow] == down {
 			xAlign = string(xAmino[xNow-1]) + xAlign
 			yAlign = "-" + yAlign
 			xNow--
@@ -161,20 +176,14 @@ func sequenceAlignmentDP(matrix [][]int, xAmino string, yAmino string) (string, 
 }
 
 func star(matrix [][]int, aminos []string) ([]string, error) {
-	pairAlignments := make([][]string, len(aminos))
-	for i := 0; i < len(aminos); i++ {
-		pairAlignments[i] = make([]string, len(aminos))
-	}
 	similaritySums := make([]int, len(aminos))
 	for i, rAmino := range aminos {
 		for j, cAmino := range aminos[:i] {
-			rAlign, cAlign, score, err := sequenceAlignmentDP(matrix, rAmino, cAmino)
+			_, _, score, err := sequenceAlignmentDP(matrix, rAmino, cAmino)
 			if err != nil {
 				return nil, err
 			}
-			fmt.Printf("r: %s\nc: %s\n\n", rAlign, cAlign)
-			pairAlignments[i][j] = rAlign
-			pairAlignments[j][i] = cAlign
+			// fmt.Printf("r: %s\nc: %s\n\n", rAlign, cAlign)
 			similaritySums[i] += score
 			similaritySums[j] += score
 		}
@@ -183,27 +192,55 @@ func star(matrix [][]int, aminos []string) ([]string, error) {
 	// search max
 	_, seqCId := maxSlice(similaritySums)
 
-	// search max length
-	_, seqCGapId := maxLength(pairAlignments[seqCId])
-
-	seqC := pairAlignments[seqCId][seqCGapId]
-
 	// calc
 	ansAlignments := make([]string, len(aminos))
+	gapList := make([][]int, len(aminos))
 	for i, amino := range aminos {
 		if i == seqCId {
-			ansAlignments[i] = seqC
+			ansAlignments[i] = aminos[seqCId]
 			continue
 		}
-		xAlign, yAlign, _, err := sequenceAlignmentDP(matrix, seqC, amino)
+		xAlign, yAlign, _, err := sequenceAlignmentDP(matrix, aminos[seqCId], amino)
+		// xAlignとaminos[seqCId]を比較してgapの位置を特定する
+		// fmt.Printf("r: %s\nc: %s\n\n", xAlign, yAlign)
 		if err != nil {
 			return nil, err
 		}
-		if xAlign != seqC {
-			fmt.Printf("x: %s\ny: %s\nc: %s\n\n", xAlign, yAlign, seqC)
-		}
 		ansAlignments[i] = yAlign
+		gapList[i], err = searchGaps(xAlign, aminos[seqCId])
 	}
+
+	// insert gap
+	flag := 0
+	nows := make([]int, len(aminos))
+	for i := 0; ; i++ {
+		// search mins
+		minGapPos := inf
+		flag = 0
+		for j := 0; j < len(aminos); j++ {
+			if nows[j] >= len(gapList[j]) {
+				continue
+			}
+			flag = 1
+			if gapList[j][nows[j]] < minGapPos {
+				minGapPos = gapList[j][nows[j]]
+			}
+		}
+		if flag == 0 {
+			break
+		}
+
+		// insert gap
+		for j := 0; j < len(aminos); j++ {
+			if nows[j] < len(gapList[j]) && gapList[j][nows[j]] == minGapPos {
+				nows[j]++
+				continue
+			}
+			ok := i + minGapPos
+			ansAlignments[j] = ansAlignments[j][:ok] + "-" + ansAlignments[j][ok:]
+		}
+	}
+
 	return ansAlignments, nil
 }
 
@@ -258,4 +295,27 @@ func getScore(matrix [][]int, x, y string) (int, error) {
 		return 0, err
 	}
 	return matrix[xid][yid], nil
+}
+
+func searchGaps(gap, original string) ([]int, error) {
+	gapPoint := make([]int, len(gap)-len(original))
+	now := 0
+	nowGap := 0
+	for _, gRune := range gap {
+		if now == len(original) {
+			gapPoint[nowGap] = now
+			nowGap++
+			continue
+		}
+		if string(gRune) != string(original[now]) {
+			gapPoint[nowGap] = now
+			nowGap++
+		} else {
+			now++
+		}
+	}
+	if nowGap != len(gap)-len(original) {
+		return nil, fmt.Errorf("error: cant find gap")
+	}
+	return gapPoint, nil
 }
