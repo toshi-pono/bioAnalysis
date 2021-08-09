@@ -74,10 +74,12 @@ func main() {
 	e.Logger.Fatal(e.Start(":8080"))
 }
 
+// getIndexHandler return index.html
 func getIndexHandler(c echo.Context) error {
 	return c.File("public/index.html")
 }
 
+// postTreeHandler create tree
 func postTreeHandler(c echo.Context) error {
 	param := new(AminoSequences)
 	if err := c.Bind(param); err != nil {
@@ -95,6 +97,7 @@ func postTreeHandler(c echo.Context) error {
 	return c.JSON(http.StatusOK, tree)
 }
 
+// readBlosum ファイルからアミノ酸残基間スコアを読み込み
 func readBlosum(filename string) ([][]int, error) {
 	blosum := make([][]int, matrixSize)
 	f, err := os.Open(filename)
@@ -131,26 +134,31 @@ func readBlosum(filename string) ([][]int, error) {
 	return blosum, nil
 }
 
+// sequenceAlignmentDP 動的計画法によってペア間アライメントとスコアを計算する
 func sequenceAlignmentDP(matrix [][]int, xAmino string, yAmino string) (string, string, int, error) {
 	dp := make([][]int, len(xAmino)+1)
 	for i := 0; i < len(xAmino)+1; i++ {
 		dp[i] = make([]int, len(yAmino)+1)
 	}
+	// DP
 	for i, x := range xAmino {
 		for j, y := range yAmino {
 			score, err := getScore(matrix, string(x), string(y))
 			if err != nil {
 				return "", "", 0, err
 			}
+			// 3方向の移動について比較して最大のものを選択
 			right := dp[i+1][j]
 			down := dp[i][j+1]
+			rightDown := dp[i][j] + score
+
+			// Out Gap のペナルティはゼロ
 			if i+1 != len(xAmino) {
 				right += gapPenalty
 			}
 			if j+1 != len(yAmino) {
 				down += gapPenalty
 			}
-			rightDown := dp[i][j] + score
 			dp[i+1][j+1] = max3(right, down, rightDown)
 		}
 	}
@@ -161,6 +169,7 @@ func sequenceAlignmentDP(matrix [][]int, xAmino string, yAmino string) (string, 
 	xNow := len(xAmino)
 	yNow := len(yAmino)
 	for {
+		// 左辺か上辺にたどり着いたとき
 		if xNow == 0 && yNow == 0 {
 			break
 		} else if xNow == 0 {
@@ -174,25 +183,30 @@ func sequenceAlignmentDP(matrix [][]int, xAmino string, yAmino string) (string, 
 			xNow--
 			continue
 		}
+		// どの方向から来たか大きさを比較して戻る
 		score, err := getScore(matrix, string(xAmino[xNow-1]), string(yAmino[yNow-1]))
 		if err != nil {
 			return "", "", 0, err
 		}
 		down := dp[xNow-1][yNow]
 		rightDown := dp[xNow-1][yNow-1] + score
+		// Out Gapペナルティはゼロ
 		if yNow != len(yAmino) {
 			down += gapPenalty
 		}
 		if dp[xNow][yNow] == rightDown {
+			// 右下
 			xAlign = string(xAmino[xNow-1]) + xAlign
 			yAlign = string(yAmino[yNow-1]) + yAlign
 			xNow--
 			yNow--
 		} else if dp[xNow][yNow] == down {
+			// 下
 			xAlign = string(xAmino[xNow-1]) + xAlign
 			yAlign = "-" + yAlign
 			xNow--
 		} else {
+			// 右
 			xAlign = "-" + xAlign
 			yAlign = string(yAmino[yNow-1]) + yAlign
 			yNow--
@@ -202,7 +216,9 @@ func sequenceAlignmentDP(matrix [][]int, xAmino string, yAmino string) (string, 
 	return xAlign, yAlign, dp[len(xAmino)][len(yAmino)], nil
 }
 
+// star スター法によって多重アライメントを計算
 func star(matrix [][]int, aminos []string) ([]string, error) {
+	// ペア間類似性スコアの計算
 	similaritySums := make([]int, len(aminos))
 	for i, rAmino := range aminos {
 		for j, cAmino := range aminos[:i] {
@@ -216,10 +232,10 @@ func star(matrix [][]int, aminos []string) ([]string, error) {
 		}
 	}
 
-	// search max
+	// 中心となる配列 seqC の決定
 	_, seqCId := maxSlice(similaritySums)
 
-	// calc
+	// 配列 seqC を中心にペア間アライメントを準備
 	ansAlignments := make([]string, len(aminos))
 	gapList := make([][]int, len(aminos))
 	for i, amino := range aminos {
@@ -227,17 +243,19 @@ func star(matrix [][]int, aminos []string) ([]string, error) {
 			ansAlignments[i] = aminos[seqCId]
 			continue
 		}
+		// DP
 		xAlign, yAlign, _, err := sequenceAlignmentDP(matrix, aminos[seqCId], amino)
-		// xAlignとaminos[seqCId]を比較してgapの位置を特定する
 		// fmt.Printf("r: %s\nc: %s\n\n", xAlign, yAlign)
 		if err != nil {
 			return nil, err
 		}
+
 		ansAlignments[i] = yAlign
+		// xAlignとaminos[seqCId]を比較してgapの位置を特定する
 		gapList[i], err = searchGaps(xAlign, aminos[seqCId])
 	}
 
-	// insert gap
+	// Gapを挿入してアライメントを融合
 	flag := 0
 	nows := make([]int, len(aminos))
 	for i := 0; ; i++ {
@@ -271,6 +289,7 @@ func star(matrix [][]int, aminos []string) ([]string, error) {
 	return ansAlignments, nil
 }
 
+// max3 Return the largest of the three
 func max3(x, y, z int) int {
 	ans := x
 	if ans < y {
@@ -282,6 +301,7 @@ func max3(x, y, z int) int {
 	return ans
 }
 
+// maxSlice Return the maximum in the slice
 func maxSlice(x []int) (int, int) {
 	var id, value int
 	for i, v := range x {
@@ -293,6 +313,7 @@ func maxSlice(x []int) (int, int) {
 	return value, id
 }
 
+// maxLength Return the maximum length of the slice
 func maxLength(x []string) (int, int) {
 	var id, length int
 	for i, v := range x {
@@ -304,6 +325,7 @@ func maxLength(x []string) (int, int) {
 	return length, id
 }
 
+// getProtainId Get the number corresponding to the amino acid
 func getProtainId(x string) (int, error) {
 	id, ok := proteinMap[x]
 	if !ok {
@@ -312,6 +334,7 @@ func getProtainId(x string) (int, error) {
 	return id, nil
 }
 
+// getScore Get the similarity score
 func getScore(matrix [][]int, x, y string) (int, error) {
 	xid, err := getProtainId(x)
 	if err != nil {
@@ -324,6 +347,7 @@ func getScore(matrix [][]int, x, y string) (int, error) {
 	return matrix[xid][yid], nil
 }
 
+// searchGaps Locate the gap insertion point
 func searchGaps(gap, original string) ([]int, error) {
 	gapPoint := make([]int, len(gap)-len(original))
 	now := 0
@@ -347,6 +371,7 @@ func searchGaps(gap, original string) ([]int, error) {
 	return gapPoint, nil
 }
 
+// pDistance (距離 = 配列の異なる部分の数 / 配列長)
 func pDistance(x, y string) (float64, error) {
 	if len(x) != len(y) {
 		return 0.0, fmt.Errorf("string length is diffrence")
@@ -360,11 +385,14 @@ func pDistance(x, y string) (float64, error) {
 	return float64(count) / float64(len(x)), nil
 }
 
+// createTree UPGMA法によって進化系統樹を作成する
 func createTree(multiAlignment []string) ([]Tree, error) {
 	distances := make([][]float64, len(multiAlignment))
 	for i := 0; i < len(multiAlignment); i++ {
 		distances[i] = make([]float64, len(multiAlignment))
 	}
+
+	// 距離行列を作成
 	for i := 0; i < len(multiAlignment); i++ {
 		for j := 0; j < i; j++ {
 			distance, err := pDistance(multiAlignment[i], multiAlignment[j])
@@ -375,10 +403,14 @@ func createTree(multiAlignment []string) ([]Tree, error) {
 			distances[j][i] = distance
 		}
 	}
+
+	// クラスタに含まれる値の数を保持
 	duplications := make([]int, len(multiAlignment))
 	for i := 0; i < len(duplications); i++ {
 		duplications[i] = 1
 	}
+
+	// 木に葉を追加
 	nodeIds := make([]int, len(multiAlignment))
 	tree := make([]Tree, 0)
 	for i := 0; i < len(multiAlignment); i++ {
@@ -390,8 +422,9 @@ func createTree(multiAlignment []string) ([]Tree, error) {
 		nodeIds[i] = i
 	}
 
+	// 進化系統樹の作成
 	for k := 0; k < len(multiAlignment)-1; k++ {
-		// 最小を見つける
+		// 距離行列の中で，最小のペアを見つける
 		minDistance := 1.0
 		var minI, minJ int
 		for i := 0; i < len(multiAlignment); i++ {
@@ -410,7 +443,7 @@ func createTree(multiAlignment []string) ([]Tree, error) {
 			}
 		}
 
-		// minJにminIを統合する
+		// minJにminIを統合する（距離行列の更新）
 		for i := 0; i < len(multiAlignment); i++ {
 			if duplications[i] == 0 || i == minI || i == minJ {
 				continue
@@ -420,7 +453,7 @@ func createTree(multiAlignment []string) ([]Tree, error) {
 			distances[i][minJ] = distance
 		}
 
-		// 木に追加する
+		// 木に節を追加する
 		tree = append(tree, Tree{
 			Left:  nodeIds[minJ],
 			Right: nodeIds[minI],
