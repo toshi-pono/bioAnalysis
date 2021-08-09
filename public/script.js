@@ -2,6 +2,9 @@ const LINE_WIDTH = 2;
 const PADDING = 100;
 const PADDING_BOTTOM = 20;
 
+// 描画桁数
+const NUMBER_DIGIT = 2;
+
 window.onload = () => {
   const canvas = document.getElementById("canvas");
   const context = canvas.getContext("2d");
@@ -72,7 +75,7 @@ window.onload = () => {
           context.textAlign = "start";
           context.textBaseline = "middle";
           context.fillText(
-            (parentScore - tree[id].score).toPrecision(2),
+            (parentScore - tree[id].score).toPrecision(NUMBER_DIGIT),
             x + LINE_WIDTH + 1,
             (y1 + y0) / 2,
             ONE_WIDTH
@@ -90,7 +93,7 @@ window.onload = () => {
       context.textAlign = "start";
       context.textBaseline = "middle";
       context.fillText(
-        (parentScore - tree[id].score).toPrecision(2),
+        (parentScore - tree[id].score).toPrecision(NUMBER_DIGIT),
         x + LINE_WIDTH + 1,
         (y1 + y0) / 2,
         ONE_WIDTH
