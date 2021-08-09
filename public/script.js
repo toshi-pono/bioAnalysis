@@ -1,19 +1,23 @@
+const LINE_WIDTH = 2;
+const PADDING = 100;
+const PADDING_BOTTOM = 20;
+
 window.onload = () => {
   const canvas = document.getElementById("canvas");
   const context = canvas.getContext("2d");
+  context.textAlign = "center";
+  context.textBaseline = "top";
 
-  // todo get by canvas
-  const WIDTH = 640;
-  const HEIGHT = 480;
-  const LINE_WIDTH = 2;
-  const PADDING = 100;
+  const WIDTH = canvas.width;
+  const HEIGHT = canvas.height;
+
+  const TREE_HEIGHT = HEIGHT - PADDING_BOTTOM;
 
   const aminos = [
     "MKPIIAVNYKAYYPYSFGENALRIARDAKRVWEETGVEVILAPPFTEIYRVLKEVEGSGVKVFAQHADPVEPGAVTGYIPVEGLKEAGVHGVILNHSEHRLKIADINALIIKARRLGLKTLACADVPETGAAIALLKPDMIAVEPPELIGTGVSVSKAKPEVITNSVSMIRSVNKEALILTGAGITTGEDVYQAVKLGTIGVLVASGIVKAKDPYSVMKDMALNALKAVS",
     "MAPRKFFVGGNWKMNGDKKSLGELIHTLNGAKLSADTEVVCGAPSIYLDFARQKLDAKIGVAAQNCYKVPKGAFTGEISPAMIKDIGAAWVILGHSERRHVFGESDELIGQKVAHALAEGLGVIACIGEKLDEREAGITEKVVFEQTKAIADNVKDWSKVVLAYEPVWAIGTGKTATPQQAQEVHEKLRGWLKSHVSDAVAQSTRIIYGGSVTGGNCKELASQHDVDGFLVGGASLKPEFVDIINAKH",
     "MARKFFVGGNWKCNGTAEEVKKIVNTLNEAQVPSQDVVEVVVSPPYVFLPLVKSTLRSDFFVAAQNCWVKKGGAFTGEVSAEMLVNLDIPWVILGHSERRAILNESSEFVGDKVAYALAQGLKVIACVGETLEEREAGSTMDVVAAQTKAIADRVTNWSNVVIAYEPVWAIGTGKVASPAQAQEVHDELRKWLAKNVSADVAATTRIIYGGSVNGGNCKELGGQADVDGFLVGGASLKPEFIDIIKAAEVKKSA",
     "MRQIIIAGNWKMHKTQTESLEFLQGFLSHLEDTPEERETVLCVPFTCLNFMSKNLHGSRVKLGAQNIHWADQGAFTGEISGEMLKEFGINYVIVGHSERRQYFGETDETVNARLLAAQKHGLTPILCVGESKAQRDAGETEAVISAQIEKDLVNVDQNNLVIAYEPIWAIGTGDTCEAAEANRVIGLIRSQLTNKNVTIQYGGSVNPKNVDEIMAQPEIDGALVGGASLDPESFARLVNYQ",
-    "MHKTQAESLEFLQSFLPQLENTAEDREVILCAPYTALGVMSKNLHGTRVRIGSQNVHWEESGAFTGEIAPSMLTEIGVTYAVVGHSERRQYFGETDETVNFRARAAQKAELTPILCVGESKEQRDAGQTETVIKEQLKADLVGVDLSQLVIAYEPIWAIGTGDTCEAEEANRVIGMIRSELSSSDVPIQYGGSVKPANIDEIMAQPEIDGALVGGASLDPVGFARIVNYEAT",
     "MHKTQAESLEFLQSFLPQLENTAEDREVILCAPYTALGVMSKNLHGTRVRIGSQNVHWEESGAFTGEIAPSMLTEIGVTYAVVGHSERRQYFGETDETVNFRARAAQKAELTPILCVGESKEQRDAGQTETVIKEQLKADLVGVDLSQLVIAYEPIWAIGTGDTCEAEEANRVIGMIRSELSSSDVPIQYGGSVKPANIDEIMAQPEIDGALVGGASLDPVGFARIVNYEAT",
     "MKRQIVIAGNWKMHKTNSEAMQLANQVRIKTMDITKTQIVICPPFTALAPVYEVIGDSRIHLGAQNMFWEKEGAFTGEISAGMIKSTGADYVIIGHSERRQYFGESDETVNKKVKAALENGLKPIVCVGETLEEREANITLKVVSRQIRGAFADLSAEQMKKVIVAYEPVWAIGTGKTATPEQAQQVHQEIRQLLTEMFGSEIGEKMVIQYGGSVKPANAESLLSQPDIDGALVGGACLKADSFSEIIHIAEKLQ",
     "MKTRQQIVAGNWKMNKNYGEGRELAMEIVERLKPSNTQVVLCAPYIHLQLVKNIIKDVASLYLGAQNCHQEDKGAYTGEISVDMLKSVGVSYVILGHSERREYFGESDELLAKKTDKVLAAGLLPIFCCGESLDIRDAGTHVAHVQAQIKAGLFHLSPEEFQKVVIAYEPIWAIGTGRTASPEQAQDMHAAIRALLTDQYGAEIADATTILYGGSVNGGNAAVLFSQPDVDGGLVGGASLKAEEFITIVEATKK",
@@ -39,6 +43,7 @@ window.onload = () => {
       console.log("2個以上のデータを指定してください");
       return;
     }
+    // 木の取得
     const res = await fetch("/tree", {
       method: "POST",
       headers: {
@@ -47,28 +52,52 @@ window.onload = () => {
       body: JSON.stringify(data),
     });
     const tree = await res.json();
+    console.log(tree);
     let nowId = 0;
 
-    const drawTree = (tree, id, parentScore) => {
-      const y0 = (0.5 - parentScore) * HEIGHT * 2;
-      const y1 = (0.5 - tree[id].score) * HEIGHT * 2;
+    // 木の描画
+    const ONE_WIDTH = (WIDTH - PADDING) / (aminos.length - 1);
+    const drawTree = (tree, id, parentScore, isLeft) => {
+      const y0 = (0.5 - parentScore) * TREE_HEIGHT * 2;
+      const y1 = (0.5 - tree[id].score) * TREE_HEIGHT * 2;
+      console.log(y0, y1);
       // 葉の場合
       if (tree[id].left === -1 && tree[id].right === -1) {
-        const x =
-          (nowId * (WIDTH - PADDING)) / (aminos.length - 1) + PADDING / 2;
+        const x = nowId * ONE_WIDTH + PADDING / 2;
         context.fillRect(x, y0, LINE_WIDTH, y1 - y0);
+        context.textAlign = "center";
+        context.textBaseline = "top";
+        context.fillText("data" + id, x, TREE_HEIGHT, ONE_WIDTH);
+        if (!isLeft) {
+          context.textAlign = "start";
+          context.textBaseline = "middle";
+          context.fillText(
+            (parentScore - tree[id].score).toPrecision(2),
+            x + LINE_WIDTH + 1,
+            (y1 + y0) / 2,
+            ONE_WIDTH
+          );
+        }
         nowId++;
         return x;
       }
       // 節
-      const leftx = drawTree(tree, tree[id].left, tree[id].score);
-      const rightx = drawTree(tree, tree[id].right, tree[id].score);
+      const leftx = drawTree(tree, tree[id].left, tree[id].score, true);
+      const rightx = drawTree(tree, tree[id].right, tree[id].score, false);
       const x = (leftx + rightx) / 2;
       context.fillRect(x, y0, LINE_WIDTH, y1 - y0);
       context.fillRect(leftx, y1, rightx - leftx, LINE_WIDTH);
+      context.textAlign = "start";
+      context.textBaseline = "middle";
+      context.fillText(
+        (parentScore - tree[id].score).toPrecision(2),
+        x + LINE_WIDTH + 1,
+        (y1 + y0) / 2,
+        ONE_WIDTH
+      );
       return x;
     };
-    drawTree(tree, tree.length - 1, 1);
+    drawTree(tree, tree.length - 1, 1, false);
   };
 
   getTree();
