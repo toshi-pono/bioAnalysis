@@ -7,6 +7,7 @@ const NUMBER_DIGIT = 2;
 
 window.onload = () => {
   const canvas = document.getElementById("canvas");
+  const elapsed = document.getElementById("elapsed");
   const context = canvas.getContext("2d");
   context.textAlign = "center";
   context.textBaseline = "top";
@@ -76,9 +77,12 @@ window.onload = () => {
       },
       body: JSON.stringify(data),
     });
-    const tree = await res.json();
-    console.log(tree);
+    const treeRes = await res.json();
+    const tree = treeRes.treedata;
     let nowId = 0;
+
+    // 経過時間の描画
+    elapsed.innerText = "処理時間:" + treeRes.elapsedtime + "(ms)";
 
     // 縦軸の調整
     const SCORE_MAX = tree[tree.length - 1].score + 0.1;

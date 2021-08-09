@@ -9,6 +9,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"time"
 
 	echo "github.com/labstack/echo/v4"
 )
@@ -59,6 +60,11 @@ type AminoSequences struct {
 	Aminos []string `json:"aminos"`
 }
 
+type TreeResponse struct {
+	TreeData    []Tree `json:"treedata"`
+	ElapsedTime int64  `json:"elapsedtime"`
+}
+
 func main() {
 	// load blosum62.txt
 	var err error
@@ -86,6 +92,7 @@ func postTreeHandler(c echo.Context) error {
 		return err
 	}
 
+	now := time.Now()
 	multiAlignment, err := star(blosum, param.Aminos)
 	if err != nil {
 		log.Fatal(err)
@@ -94,7 +101,11 @@ func postTreeHandler(c echo.Context) error {
 	if err != nil {
 		log.Fatal(err)
 	}
-	return c.JSON(http.StatusOK, tree)
+
+	return c.JSON(http.StatusOK, TreeResponse{
+		TreeData:    tree,
+		ElapsedTime: time.Since(now).Milliseconds(),
+	})
 }
 
 // readBlosum ファイルからアミノ酸残基間スコアを読み込み
